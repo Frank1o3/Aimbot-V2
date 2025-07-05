@@ -5,7 +5,7 @@ from config import load_config
 def main():
     try:
         config = load_config("settings.ini")
-        tracker = Tracker(**config)
+        tracker = Tracker(**config) # type: ignore
         tracker.run()
     except Exception as e:
         print(f"Error: {e}")
