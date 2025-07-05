@@ -1,0 +1,7 @@
+pywin32
+numpy
+pillow
+opencv-python
+mss
+scipy
+colorama
