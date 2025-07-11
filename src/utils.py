@@ -6,17 +6,26 @@ import scipy.sparse
 
 MatLike = Union[np.ndarray, scipy.sparse.spmatrix, Sequence[Sequence[float]]]
 
-def precompute_hsv(target_color: Tuple[int, int, int], color_tolerance: int) -> Tuple[np.ndarray, np.ndarray]:
-    """Precompute HSV bounds for color detection."""
+def precompute_hsv(target_color: Tuple[int, int, int], tolerance: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Compute dynamic HSV bounds based on target color and tolerance for each channel."""
     target_bgr_np = np.array([[target_color]], dtype=np.uint8)
     target_hsv = cv.cvtColor(target_bgr_np, cv.COLOR_BGR2HSV)[0][0]
-    hue = int(target_hsv[0])
-    lower_hue = max(0, hue - color_tolerance)
-    upper_hue = min(179, hue + color_tolerance)
-    return (
-        np.array([lower_hue, 100, 100], dtype=np.uint8),
-        np.array([upper_hue, 255, 255], dtype=np.uint8),
-    )
+
+    h, s, v = target_hsv
+    lower = np.array([
+        max(0, h - tolerance),
+        max(0, s - tolerance),
+        max(0, v - tolerance)
+    ], dtype=np.uint8)
+
+    upper = np.array([
+        min(179, h + tolerance),
+        min(255, s + tolerance),
+        min(255, v + tolerance)
+    ], dtype=np.uint8)
+
+    return lower, upper
+
 
 def print_debug(
     logger,

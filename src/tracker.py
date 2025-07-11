@@ -12,10 +12,7 @@ import win32con
 import ctypes
 import logging
 from mss import mss
-import colorama
 from utils import precompute_hsv, print_debug, MatLike
-
-colorama.init()
 
 class Tracker:
     def __init__(
@@ -167,35 +164,38 @@ class Tracker:
             return None, None
 
     def detect_contours(self, img_np: MatLike) -> List[Tuple[np.ndarray, float]]:
-        """Detect contours in an image using HSV filtering."""
+        """Detect contours using combined HSV masking and Canny edge highlighting."""
         if not isinstance(img_np, np.ndarray) or img_np.size == 0:
-            print_debug(self.logger, self.debug_verbose, self.win_name, self.avg_fps,
-                        self.latest_contours, self.max_targets, self.current_target_idx,
-                        self.image_queue.qsize(), self.image_queue.maxsize,
-                        Input_Error="Input image is None or empty")
             return []
 
         img_np = np.asarray(img_np, dtype=np.uint8)
         if img_np.shape[0] < 10 or img_np.shape[1] < 10:
-            print_debug(self.logger, self.debug_verbose, self.win_name, self.avg_fps,
-                        self.latest_contours, self.max_targets, self.current_target_idx,
-                        self.image_queue.qsize(), self.image_queue.maxsize,
-                        Input_Error="Input image too small")
             return []
 
         try:
+            # Convert to HSV and apply color mask
             hsv = cv.cvtColor(img_np, cv.COLOR_RGB2HSV)
-            mask = cv.inRange(hsv, self.hsv_lower, self.hsv_upper)
-            kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
-            mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel, iterations=2)
-            contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+            mask_color = cv.inRange(hsv, self.hsv_lower, self.hsv_upper)
+
+            # Convert to grayscale and apply Canny edge detection
+            gray = cv.cvtColor(img_np, cv.COLOR_RGB2GRAY)
+            edges = cv.Canny(gray, 50, 150)
+
+            # Combine both: keep only edges that match the color
+            combined_mask = cv.bitwise_and(edges, mask_color)
+
+            # Close small gaps
+            kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (3, 3))
+            combined_mask = cv.morphologyEx(combined_mask, cv.MORPH_CLOSE, kernel, iterations=2)
+
+            # Find contours
+            contours, _ = cv.findContours(combined_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
             valid_contours = [(c, cv.contourArea(c)) for c in contours if cv.contourArea(c) >= self.min_area]
             return sorted(valid_contours, key=lambda x: x[1], reverse=True)[:self.max_targets]
+
         except cv.error as e:
-            print_debug(self.logger, self.debug_verbose, self.win_name, self.avg_fps,
-                        self.latest_contours, self.max_targets, self.current_target_idx,
-                        self.image_queue.qsize(), self.image_queue.maxsize,
-                        Contour_Error=str(e))
+            if self.debug_verbose:
+                print(f"[ERROR] Contour detection failed: {e}")
             return []
 
     def capture_thread(self):

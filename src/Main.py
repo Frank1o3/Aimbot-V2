@@ -1,6 +1,7 @@
 import sys
 from tracker import Tracker
 from config import load_config
+import colorama
 
 def main():
     try:
@@ -12,4 +13,6 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
+    
+    colorama.init()
     main()
