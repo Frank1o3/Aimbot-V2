@@ -14,6 +14,7 @@ import logging
 from mss import mss
 from utils import precompute_hsv, print_debug, MatLike
 
+
 class Tracker:
     def __init__(
         self,
@@ -37,7 +38,7 @@ class Tracker:
         self.hwnd = win32gui.FindWindow(None, win_name)
         if not self.hwnd:
             raise RuntimeError(f"Window '{win_name}' not found.")
-        
+
         logging.basicConfig(
             filename="tracker.log",
             level=logging.DEBUG,
@@ -101,7 +102,9 @@ class Tracker:
         if x != 0 and y != 0:
             pixel_color = tuple(int(c) for c in img_np[y, x])
             self.target_color = (pixel_color[2], pixel_color[1], pixel_color[0])
-            self.hsv_lower, self.hsv_upper = precompute_hsv(self.target_color, self.color_tolerance)
+            self.hsv_lower, self.hsv_upper = precompute_hsv(
+                self.target_color, self.color_tolerance
+            )
             self.logger.info(f"New target color: {self.target_color}")
             if self.debug_verbose:
                 print(f"New target color: {self.target_color}")
@@ -131,8 +134,10 @@ class Tracker:
             monitor = {
                 "top": max(client_y, center_y - fov_half),
                 "left": max(client_x, center_x - fov_half),
-                "width": min(client_x + win_width, center_x + fov_half) - max(client_x, center_x - fov_half),
-                "height": min(client_y + win_height, center_y + fov_half) - max(client_y, center_y - fov_half),
+                "width": min(client_x + win_width, center_x + fov_half)
+                - max(client_x, center_x - fov_half),
+                "height": min(client_y + win_height, center_y + fov_half)
+                - max(client_y, center_y - fov_half),
             }
 
             if monitor["width"] <= 0 or monitor["height"] <= 0:
@@ -146,15 +151,25 @@ class Tracker:
                     img_np = np.array(img)
                     img_np = cv.resize(
                         img_np,
-                        (int(img.width * self.process_scale), int(img.height * self.process_scale)),
+                        (
+                            int(img.width * self.process_scale),
+                            int(img.height * self.process_scale),
+                        ),
                         interpolation=cv.INTER_LANCZOS4,
                     )
                     img = Image.fromarray(img_np)
                 print_debug(
-                    self.logger, self.debug_verbose, self.win_name, self.avg_fps,
-                    self.latest_contours, self.max_targets, self.current_target_idx,
-                    self.image_queue.qsize(), self.image_queue.maxsize,
-                    Screen_Capture="Success", Region=f"{monitor['width']}x{monitor['height']} @ ({monitor['left']}, {monitor['top']})"
+                    self.logger,
+                    self.debug_verbose,
+                    self.win_name,
+                    self.avg_fps,
+                    self.latest_contours,
+                    self.max_targets,
+                    self.current_target_idx,
+                    self.image_queue.qsize(),
+                    self.image_queue.maxsize,
+                    Screen_Capture="Success",
+                    Region=f"{monitor['width']}x{monitor['height']} @ ({monitor['left']}, {monitor['top']})",
                 )
                 return img, monitor
         except Exception as e:
@@ -186,12 +201,22 @@ class Tracker:
 
             # Close small gaps
             kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (3, 3))
-            combined_mask = cv.morphologyEx(combined_mask, cv.MORPH_CLOSE, kernel, iterations=2)
+            combined_mask = cv.morphologyEx(
+                combined_mask, cv.MORPH_CLOSE, kernel, iterations=2
+            )
 
             # Find contours
-            contours, _ = cv.findContours(combined_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-            valid_contours = [(c, cv.contourArea(c)) for c in contours if cv.contourArea(c) >= self.min_area]
-            return sorted(valid_contours, key=lambda x: x[1], reverse=True)[:self.max_targets]
+            contours, _ = cv.findContours(
+                combined_mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE
+            )
+            valid_contours = [
+                (c, cv.contourArea(c))
+                for c in contours
+                if cv.contourArea(c) >= self.min_area
+            ]
+            return sorted(valid_contours, key=lambda x: x[1], reverse=True)[
+                : self.max_targets
+            ]
 
         except cv.error as e:
             if self.debug_verbose:
@@ -217,10 +242,18 @@ class Tracker:
             try:
                 self.image_queue.put_nowait((img, monitor))
             except queue.Full:
-                print_debug(self.logger, self.debug_verbose, self.win_name, self.avg_fps,
-                            self.latest_contours, self.max_targets, self.current_target_idx,
-                            self.image_queue.qsize(), self.image_queue.maxsize,
-                            Queue_Status="Full, skipping frame")
+                print_debug(
+                    self.logger,
+                    self.debug_verbose,
+                    self.win_name,
+                    self.avg_fps,
+                    self.latest_contours,
+                    self.max_targets,
+                    self.current_target_idx,
+                    self.image_queue.qsize(),
+                    self.image_queue.maxsize,
+                    Queue_Status="Full, skipping frame",
+                )
             elapsed = time.time() - last_capture
             time.sleep(max(0.001, min_sleep - elapsed))
             last_capture = time.time()
@@ -239,7 +272,9 @@ class Tracker:
 
                 with self.lock:
                     self.latest_contours = self.detect_contours(img_np)
-                    if self.latest_contours and self.current_target_idx >= len(self.latest_contours):
+                    if self.latest_contours and self.current_target_idx >= len(
+                        self.latest_contours
+                    ):
                         self.current_target_idx = 0
                         self.last_target_switch = time.time()
 
@@ -247,43 +282,100 @@ class Tracker:
                     img_center = (img_np.shape[1] / 2, img_np.shape[0] / 2)
                     sorted_contours = sorted(
                         self.latest_contours,
-                        key=lambda c: ((cv.boundingRect(c[0])[0] + cv.boundingRect(c[0])[2] / 2 - img_center[0]) ** 2 +
-                                      (cv.boundingRect(c[0])[1] + cv.boundingRect(c[0])[3] / 2 - img_center[1]) ** 2) ** 0.5
+                        key=lambda c: (
+                            (
+                                cv.boundingRect(c[0])[0]
+                                + cv.boundingRect(c[0])[2] / 2
+                                - img_center[0]
+                            )
+                            ** 2
+                            + (
+                                cv.boundingRect(c[0])[1]
+                                + cv.boundingRect(c[0])[3] / 2
+                                - img_center[1]
+                            )
+                            ** 2
+                        )
+                        ** 0.5,
                     )
                     with self.lock:
                         self.latest_contours = sorted_contours
 
                 if self.display_contours and self.latest_contours:
                     for i, (contour, _) in enumerate(self.latest_contours):
-                        cv.drawContours(img_np, [contour], -1, (0, 255, 0) if i == self.current_target_idx else self.target_color, thickness=cv.FILLED)
+                        cv.drawContours(
+                            img_np,
+                            [contour],
+                            -1,
+                            (
+                                (0, 255, 0)
+                                if i == self.current_target_idx
+                                else self.target_color
+                            ),
+                            thickness=cv.FILLED,
+                        )
 
                 current_time = time.time()
                 frame_count += 1
                 if current_time - last_fps_update >= fps_update_interval:
-                    self.avg_fps = frame_count / max(current_time - last_fps_update, 1e-5)
+                    self.avg_fps = frame_count / max(
+                        current_time - last_fps_update, 1e-5
+                    )
                     frame_count = 0
                     last_fps_update = current_time
 
                 if self.display_fps:
-                    cv.putText(img_np, f"FPS: {self.avg_fps:.1f}", (10, 30), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv.LINE_AA)
-                    cv.putText(img_np, f"Target: {self.current_target_idx}/{len(self.latest_contours)}", (10, 60), cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv.LINE_AA)
+                    cv.putText(
+                        img_np,
+                        f"FPS: {self.avg_fps:.1f}",
+                        (10, 30),
+                        cv.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (0, 255, 0),
+                        2,
+                        cv.LINE_AA,
+                    )
+                    cv.putText(
+                        img_np,
+                        f"Target: {self.current_target_idx}/{len(self.latest_contours)}",
+                        (10, 60),
+                        cv.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (0, 255, 0),
+                        2,
+                        cv.LINE_AA,
+                    )
 
                 mouse_moved = False
                 with self.lock:
-                    if (self.latest_contours and self.toggle and
-                        (win32api.GetAsyncKeyState(win32con.VK_LBUTTON) < 0 or
-                         win32api.GetAsyncKeyState(win32con.VK_RBUTTON) < 0) and
-                        self.monitor):
-                        if current_time - self.last_target_switch >= self.target_switch_interval:
-                            self.current_target_idx = (self.current_target_idx + 1) % len(self.latest_contours)
+                    if (
+                        self.latest_contours
+                        and self.toggle
+                        and (
+                            win32api.GetAsyncKeyState(win32con.VK_LBUTTON) < 0
+                            or win32api.GetAsyncKeyState(win32con.VK_RBUTTON) < 0
+                        )
+                        and self.monitor
+                    ):
+                        if (
+                            current_time - self.last_target_switch
+                            >= self.target_switch_interval
+                        ):
+                            self.current_target_idx = (
+                                self.current_target_idx + 1
+                            ) % len(self.latest_contours)
                             self.last_target_switch = current_time
-                            self.logger.debug(f"Switched to target {self.current_target_idx}")
+                            self.logger.debug(
+                                f"Switched to target {self.current_target_idx}"
+                            )
 
                         for i, (contour, _) in enumerate(self.latest_contours):
                             x, y, w, h = cv.boundingRect(contour)
                             center_x = x + w // 2
                             head_y = y + int(h * self.offset_head)
-                            self.target_histories.setdefault(i, deque(maxlen=5)).append((center_x, head_y))
+                            self.target_histories.setdefault(i, deque(maxlen=5)).append(
+                                (center_x, head_y)
+                            )
 
                         if self.current_target_idx < len(self.latest_contours):
                             contour, _ = self.latest_contours[self.current_target_idx]
@@ -291,7 +383,9 @@ class Tracker:
                             center_x = x + w // 2
                             head_y = y + int(h * self.offset_head)
                             time_diff = max(current_time - last_time, 1e-5)
-                            history = self.target_histories.get(self.current_target_idx, deque(maxlen=5))
+                            history = self.target_histories.get(
+                                self.current_target_idx, deque(maxlen=5)
+                            )
 
                             pred_x, pred_y = center_x, head_y
                             if len(history) >= self.lead:
@@ -302,31 +396,65 @@ class Tracker:
                                 pred_y += velocity_y * time_diff
 
                             cursor_pos = win32api.GetCursorPos()
-                            to = (int(pred_x / self.process_scale + self.monitor["left"]),
-                                  int(pred_y / self.process_scale + self.monitor["top"]))
+                            to = (
+                                int(pred_x / self.process_scale + self.monitor["left"]),
+                                int(pred_y / self.process_scale + self.monitor["top"]),
+                            )
                             delta_x = int((to[0] - cursor_pos[0]) / self.sens)
                             delta_y = int((to[1] - cursor_pos[1]) / self.sens)
 
-                            smoothed_x = self.smoothing_factor * delta_x + (1 - self.smoothing_factor) * self.last_delta_x
-                            smoothed_y = self.smoothing_factor * delta_y + (1 - self.smoothing_factor) * self.last_delta_y
-                            self.last_delta_x, self.last_delta_y = smoothed_x, smoothed_y
+                            smoothed_x = (
+                                self.smoothing_factor * delta_x
+                                + (1 - self.smoothing_factor) * self.last_delta_x
+                            )
+                            smoothed_y = (
+                                self.smoothing_factor * delta_y
+                                + (1 - self.smoothing_factor) * self.last_delta_y
+                            )
+                            self.last_delta_x, self.last_delta_y = (
+                                smoothed_x,
+                                smoothed_y,
+                            )
 
                             if abs(smoothed_x) > 0.1 or abs(smoothed_y) > 0.1:
-                                ctypes.windll.user32.mouse_event(win32con.MOUSEEVENTF_MOVE, int(smoothed_x), int(smoothed_y), 0, 0)
+                                ctypes.windll.user32.mouse_event(
+                                    win32con.MOUSEEVENTF_MOVE,
+                                    int(smoothed_x),
+                                    int(smoothed_y),
+                                    0,
+                                    0,
+                                )
                                 mouse_moved = True
 
                 print_debug(
-                    self.logger, self.debug_verbose, self.win_name, self.avg_fps,
-                    self.latest_contours, self.max_targets, self.current_target_idx,
-                    self.image_queue.qsize(), self.image_queue.maxsize,
-                    Mouse_Move=f"dx={int(smoothed_x)}, dy={int(smoothed_y)}" if mouse_moved else "None",
-                    Target_Switch=f"Target {self.current_target_idx + 1}" if mouse_moved else "None",
-                    Toggle=f"Toggle: {self.toggle}"
+                    self.logger,
+                    self.debug_verbose,
+                    self.win_name,
+                    self.avg_fps,
+                    self.latest_contours,
+                    self.max_targets,
+                    self.current_target_idx,
+                    self.image_queue.qsize(),
+                    self.image_queue.maxsize,
+                    Mouse_Move=(
+                        f"dx={int(smoothed_x)}, dy={int(smoothed_y)}"
+                        if mouse_moved
+                        else "None"
+                    ),
+                    Target_Switch=(
+                        f"Target {self.current_target_idx + 1}"
+                        if mouse_moved
+                        else "None"
+                    ),
+                    Toggle=f"Toggle: {self.toggle}",
                 )
 
                 if self.display_contours or self.display_fps:
                     cv.imshow("Processed Roblox", img_np)
-                    if cv.waitKey(1) & 0xFF == ord("q") or win32api.GetAsyncKeyState(win32con.VK_F1) < 0:
+                    if (
+                        cv.waitKey(1) & 0xFF == ord("q")
+                        or win32api.GetAsyncKeyState(win32con.VK_F1) < 0
+                    ):
                         self.running.clear()
                 elif win32api.GetAsyncKeyState(win32con.VK_F1) < 0:
                     self.running.clear()
